@@ -1,0 +1,122 @@
+pipeline {
+    agent { label 'prod-stand' }
+
+    triggers { pollSCM('* * * * *') }
+    options { timestamps() }
+
+    environment {
+        POSTGRES_IMAGE = 'postgres:12.20-alpine3.20'
+        CONFIG_FILE = 'config.yaml'
+    }
+
+    stages {
+        stage('Load Configuration from YAML') {
+            steps {
+                script {
+                    def config = readYaml file: "${env.CONFIG_FILE}"
+
+                    env.DB_PORT = config.db.port ?: '5432'
+                    env.DB_NAME = config.db.name ?: 'my_database'
+                    env.DB_USER = config.db.user ?: 'postgres'
+                    env.DB_ROLES = config.db.roles ?: []
+                    env.CONTAINER_NAME = "postgres-db-${env.DB_NAME}"
+
+                    echo "Loaded configuration: Port=${env.DB_PORT}, DB=${env.DB_NAME}, Roles=${env.DB_ROLES}"
+                    echo "Container name: ${env.CONTAINER_NAME}"
+                }
+            }
+        }
+
+        stage('Check Port Availability') {
+            steps {
+                script {
+                    def portCheck = sh(script: "ss -an | grep ${env.DB_PORT}", returnStatus: true)
+                    if (portCheck == 0) {
+                        error "Port ${env.DB_PORT} is already in use."
+                    } else {
+                        echo "Port ${env.DB_PORT} is available."
+                    }
+                }
+            }
+        }
+
+        stage('Generate Random Password') {
+            steps {
+                script {
+                    def generateRandomPassword = { ->
+                        def random = new Random()
+                        def passwordLength = random.nextInt(7) + 6
+                        def password = (1..passwordLength).collect { random.nextInt(10) }.join("")
+                        return password
+                    }
+
+                    env.RANDOM_PASSWORD = generateRandomPassword()
+                    echo "Generated password: ${env.RANDOM_PASSWORD}"
+                }
+            }
+        }
+
+        stage('Start PostgreSQL') {
+            steps {
+                script {
+                    sh """
+                        sudo ufw allow ${env.DB_PORT}
+                        sudo ufw enable
+                    """
+    
+                    sh """
+                        docker run -d --name ${env.CONTAINER_NAME} \
+                        -e POSTGRES_PASSWORD=${env.RANDOM_PASSWORD} \
+                        -e POSTGRES_USER=${env.DB_USER} \
+                        -e POSTGRES_DB=${env.DB_NAME} \
+                        -p ${env.DB_PORT}:5432 ${env.POSTGRES_IMAGE}
+                    """
+                    echo "PostgreSQL database started with container name: ${env.CONTAINER_NAME}"
+                }
+            }
+        }
+
+        stage('Check Database') {
+            steps {
+                script {
+                    sleep 10
+
+                    def dbCheck = sh(
+                        script: """
+                            docker exec ${env.CONTAINER_NAME} psql -U ${env.DB_USER} -d ${env.DB_NAME} -tc "SELECT 1 FROM pg_database WHERE datname='${env.DB_NAME}'" | grep -q 1
+                        """, returnStatus: true
+                    )
+
+                    if (dbCheck != 0) {
+                        error "Database ${env.DB_NAME} does not exist."
+                    } else {
+                        echo "Database ${env.DB_NAME} exists."
+                    }
+                }
+            }
+        }
+
+        stage('Create Roles') {
+            steps {
+                script {
+                    env.DB_ROLES.split(',').each { role ->
+                        sh """
+                            docker exec ${env.CONTAINER_NAME} psql -U ${env.DB_USER} -d ${env.DB_NAME} -c "DO \\\$\$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='${role}') THEN CREATE ROLE ${role}; END IF; END \\\$\$;"
+                        """
+                        echo "Role ${role} created or already exists."
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        failure {
+            script {
+                echo 'Pipeline failed. Stopping and removing the PostgreSQL container...'
+                sh "docker stop ${env.CONTAINER_NAME} || true"
+                sh "docker rm ${env.CONTAINER_NAME} || true"
+            }
+        }
+    }
+}
