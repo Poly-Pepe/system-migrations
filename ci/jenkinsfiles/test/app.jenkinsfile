@@ -2,7 +2,7 @@ pipeline {
     agent { label 'test-stand' }
 
     triggers { pollSCM('* * * * *') }
-    options { timestamps () }
+    options { timestamps() }
 
     stages {
         stage('Show Workspace') {
@@ -16,9 +16,11 @@ pipeline {
                 script {
                     def generateRandomPassword = { ->
                         def random = new Random()
-
+                        
                         def passwordLength = random.nextInt(7) + 6
-                        def password = (1..passwordLength).collect { random.nextInt(10) }.join() // Генерируем пароль из цифр
+                        
+                        def password = (1..passwordLength).collect { random.nextInt(10) }.join("")
+                        
                         return password
                     }
 
