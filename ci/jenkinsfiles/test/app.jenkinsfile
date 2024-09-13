@@ -4,14 +4,10 @@ pipeline {
     triggers { pollSCM('* * * * *') }
     options { timestamps () }
 
-    environment {
-        GIT_URL = 'https://github.com/Poly-Pepe/system-migrations.git'
-    }
-
     stages {
-        stage('where') {
+        stage('Show Workspace') {
             steps {
-                sh pwd
+                echo "Workspace directory: ${env.WORKSPACE}"
             }
         }
     }
