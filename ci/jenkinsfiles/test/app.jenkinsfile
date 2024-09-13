@@ -103,13 +103,4 @@ pipeline {
             }
         }
     }
-
-    post {
-        always {
-            script {
-                sh 'docker stop postgres-db || true'
-                sh 'docker rm postgres-db || true'
-            }
-        }
-    }
 }
