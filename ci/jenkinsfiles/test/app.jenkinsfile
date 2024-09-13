@@ -2,6 +2,7 @@ pipeline {
     agent { label 'test-stand' }
 
     triggers { pollSCM('* * * * *') }
+    options { timestamps () }
 
     environment {
         GIT_URL = 'https://github.com/Poly-Pepe/system-migrations.git'
