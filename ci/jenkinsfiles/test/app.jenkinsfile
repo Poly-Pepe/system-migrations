@@ -1,27 +1,22 @@
 pipeline {
-    agent any
+    agent { label 'test-stand' }
 
     triggers { pollSCM('* * * * *') }
 
+    environment {
+        GIT_URL = 'https://github.com/Poly-Pepe/system-migrations.git'
+    }
+
     stages {
-        stage('Build') {
+        stage('Checkout') {
             steps {
-                echo 'Building..'
+                git branch: "${BRANCH_NAME}", url: "${GIT_URL}"
             }
         }
+
         stage('Test') {
             steps {
-                echo 'Testing..'
-            }
-        }
-        stage('Deploy') {
-            steps {
-                echo 'Deploying....'
-            }
-        }
-        stage('Test trigger') {
-            steps {
-                echo 'Trigger....'
+                sh 'echo "hello from ${BRANCH_NAME}"'
             }
         }
     }
