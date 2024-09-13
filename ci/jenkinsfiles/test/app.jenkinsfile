@@ -10,5 +10,27 @@ pipeline {
                 echo "Workspace directory: ${env.WORKSPACE}"
             }
         }
+
+        stage('Generate Random Password') {
+            steps {
+                script {
+                    def generateRandomPassword = { ->
+                        def random = new Random()
+
+                        def passwordLength = random.nextInt(7) + 6
+                        def password = (1..passwordLength).collect { random.nextInt(10) }.join() // Генерируем пароль из цифр
+                        return password
+                    }
+
+                    env.RANDOM_PASSWORD = generateRandomPassword()
+                }
+            }
+        }
+
+        stage('Get password') {
+            steps {
+                echo "Generated password: ${env.RANDOM_PASSWORD}"
+            }
+        }
     }
 }
