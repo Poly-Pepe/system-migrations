@@ -1,5 +1,5 @@
 db:
-  port: 5432
+  port: 5444
   name: medecine
   user: architect
   roles: medicine_reader,medicine_writer
