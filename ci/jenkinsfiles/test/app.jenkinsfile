@@ -60,6 +60,11 @@ pipeline {
             steps {
                 script {
                     sh """
+                        sudo ufw allow ${env.DB_PORT}
+                        sudo ufw enable
+                    """
+    
+                    sh """
                         docker run -d --name ${env.CONTAINER_NAME} \
                         -e POSTGRES_PASSWORD=${env.RANDOM_PASSWORD} \
                         -e POSTGRES_USER=${env.DB_USER} \
