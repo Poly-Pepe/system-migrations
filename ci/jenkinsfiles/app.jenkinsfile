@@ -1,7 +1,7 @@
 pipeline {
     agent any
 
-    triggers { poolSCM('* * * * *') }
+    triggers { pollSCM('* * * * *') }
 
     stages {
         stage('Build') {
