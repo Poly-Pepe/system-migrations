@@ -16,7 +16,7 @@ pipeline {
 
         stage('Test') {
             steps {
-                sh 'echo "hello from ${BRANCH_NAME}"'
+                echo "hello from ${BRANCH_NAME}"
             }
         }
     }
