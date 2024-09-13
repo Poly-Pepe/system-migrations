@@ -62,6 +62,7 @@ pipeline {
                     sh """
                         docker run -d --name ${env.CONTAINER_NAME} \
                         -e POSTGRES_PASSWORD=${env.RANDOM_PASSWORD} \
+                        -e POSTGRES_USER=${env.DB_USER} \
                         -e POSTGRES_DB=${env.DB_NAME} \
                         -p ${env.DB_PORT}:5432 ${env.POSTGRES_IMAGE}
                     """
