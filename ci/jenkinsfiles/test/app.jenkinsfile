@@ -10,13 +10,17 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
-                git branch: "${BRANCH_NAME}", url: "${GIT_URL}"
+                checkout scm
+                script {
+                    env.BRANCH_NAME = "${env.GIT_BRANCH}"
+                    echo "Checking out branch: ${env.BRANCH_NAME}"
+                }
             }
         }
 
         stage('Test') {
             steps {
-                echo "hello from ${BRANCH_NAME}"
+                echo "hello from ${env.BRANCH_NAME}"
             }
         }
     }
