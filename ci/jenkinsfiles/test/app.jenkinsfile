@@ -14,13 +14,15 @@ pipeline {
             steps {
                 script {
                     def config = readYaml file: "${env.CONFIG_FILE}"
-                    
+
                     env.DB_PORT = config.db.port ?: '5432'
                     env.DB_NAME = config.db.name ?: 'my_database'
                     env.DB_USER = config.db.user ?: 'postgres'
                     env.DB_ROLES = config.db.roles ?: []
-                    
+                    env.CONTAINER_NAME = "postgres-db-${env.DB_NAME}"
+
                     echo "Loaded configuration: Port=${env.DB_PORT}, DB=${env.DB_NAME}, Roles=${env.DB_ROLES}"
+                    echo "Container name: ${env.CONTAINER_NAME}"
                 }
             }
         }
@@ -28,7 +30,7 @@ pipeline {
         stage('Check Port Availability') {
             steps {
                 script {
-                    def portCheck = sh(script: "netstat -an | grep ${env.DB_PORT}", returnStatus: true)
+                    def portCheck = sh(script: "ss -an | grep ${env.DB_PORT}", returnStatus: true)
                     if (portCheck == 0) {
                         error "Port ${env.DB_PORT} is already in use."
                     } else {
@@ -45,12 +47,10 @@ pipeline {
                         def random = new Random()
                         def passwordLength = random.nextInt(7) + 6
                         def password = (1..passwordLength).collect { random.nextInt(10) }.join("")
-                        
                         return password
                     }
 
                     env.RANDOM_PASSWORD = generateRandomPassword()
-                    
                     echo "Generated password: ${env.RANDOM_PASSWORD}"
                 }
             }
@@ -60,12 +60,12 @@ pipeline {
             steps {
                 script {
                     sh """
-                        docker run -d --name postgres-db \
+                        docker run -d --name ${env.CONTAINER_NAME} \
                         -e POSTGRES_PASSWORD=${env.RANDOM_PASSWORD} \
                         -e POSTGRES_DB=${env.DB_NAME} \
                         -p ${env.DB_PORT}:5432 ${env.POSTGRES_IMAGE}
                     """
-                    echo "PostgreSQL database started with password: ${env.RANDOM_PASSWORD} on port ${env.DB_PORT}"
+                    echo "PostgreSQL database started with container name: ${env.CONTAINER_NAME}"
                 }
             }
         }
@@ -77,7 +77,7 @@ pipeline {
 
                     def dbCheck = sh(
                         script: """
-                            docker exec postgres-db psql -U ${env.DB_USER} -tc "SELECT 1 FROM pg_database WHERE datname='${env.DB_NAME}'" | grep -q 1
+                            docker exec ${env.CONTAINER_NAME} psql -U ${env.DB_USER} -tc "SELECT 1 FROM pg_database WHERE datname='${env.DB_NAME}'" | grep -q 1
                         """, returnStatus: true
                     )
 
@@ -95,11 +95,21 @@ pipeline {
                 script {
                     env.DB_ROLES.split(',').each { role ->
                         sh """
-                            docker exec postgres-db psql -U ${env.DB_USER} -c 'DO \$\$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname=''${role}'') THEN CREATE ROLE ${role}; END IF; END \$\$;'
+                            docker exec ${env.CONTAINER_NAME} psql -U ${env.DB_USER} -c "DO \$\$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='${role}') THEN CREATE ROLE ${role}; END IF; END \$\$;"
                         """
                         echo "Role ${role} created or already exists."
                     }
                 }
+            }
+        }
+    }
+
+    post {
+        failure {
+            script {
+                echo 'Pipeline failed. Stopping and removing the PostgreSQL container...'
+                sh "docker stop ${env.CONTAINER_NAME} || true"
+                sh "docker rm ${env.CONTAINER_NAME} || true"
             }
         }
     }
