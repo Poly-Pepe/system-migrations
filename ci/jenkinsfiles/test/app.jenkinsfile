@@ -50,6 +50,8 @@ pipeline {
                     }
 
                     env.RANDOM_PASSWORD = generateRandomPassword()
+                    
+                    echo "Generated password: ${env.RANDOM_PASSWORD}"
                 }
             }
         }
@@ -98,12 +100,6 @@ pipeline {
                         echo "Role ${role} created or already exists."
                     }
                 }
-            }
-        }
-
-        stage('Get password') {
-            steps {
-                echo "Generated password: ${env.RANDOM_PASSWORD}"
             }
         }
     }
