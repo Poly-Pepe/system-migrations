@@ -1,0 +1,5 @@
+db:
+  port: 5432
+  name: my_database
+  user: postgres
+  roles: admin,developer,analyst

@@ -4,10 +4,37 @@ pipeline {
     triggers { pollSCM('* * * * *') }
     options { timestamps() }
 
+    environment {
+        POSTGRES_IMAGE = 'postgres:12.20-alpine3.20'
+        CONFIG_FILE = 'config.yaml'
+    }
+
     stages {
-        stage('Show Workspace') {
+        stage('Load Configuration from YAML') {
             steps {
-                echo "Workspace directory: ${env.WORKSPACE}"
+                script {
+                    def config = readYaml file: "${env.CONFIG_FILE}"
+                    
+                    env.DB_PORT = config.db.port ?: '5432'
+                    env.DB_NAME = config.db.name ?: 'my_database'
+                    env.DB_USER = config.db.user ?: 'postgres'
+                    env.DB_ROLES = config.db.roles ?: []
+                    
+                    echo "Loaded configuration: Port=${env.DB_PORT}, DB=${env.DB_NAME}, Roles=${env.DB_ROLES}"
+                }
+            }
+        }
+
+        stage('Check Port Availability') {
+            steps {
+                script {
+                    def portCheck = sh(script: "netstat -an | grep ${env.DB_PORT}", returnStatus: true)
+                    if (portCheck == 0) {
+                        error "Port ${env.DB_PORT} is already in use."
+                    } else {
+                        echo "Port ${env.DB_PORT} is available."
+                    }
+                }
             }
         }
 
@@ -27,9 +54,65 @@ pipeline {
             }
         }
 
+        stage('Start PostgreSQL') {
+            steps {
+                script {
+                    sh """
+                        docker run -d --name postgres-db \
+                        -e POSTGRES_PASSWORD=${env.RANDOM_PASSWORD} \
+                        -e POSTGRES_DB=${env.DB_NAME} \
+                        -p ${env.DB_PORT}:5432 ${env.POSTGRES_IMAGE}
+                    """
+                    echo "PostgreSQL database started with password: ${env.RANDOM_PASSWORD} on port ${env.DB_PORT}"
+                }
+            }
+        }
+
+        stage('Check Database') {
+            steps {
+                script {
+                    sleep 10
+
+                    def dbCheck = sh(
+                        script: """
+                            docker exec postgres-db psql -U ${env.DB_USER} -tc "SELECT 1 FROM pg_database WHERE datname='${env.DB_NAME}'" | grep -q 1
+                        """, returnStatus: true
+                    )
+
+                    if (dbCheck != 0) {
+                        error "Database ${env.DB_NAME} does not exist."
+                    } else {
+                        echo "Database ${env.DB_NAME} exists."
+                    }
+                }
+            }
+        }
+
+        stage('Create Roles') {
+            steps {
+                script {
+                    env.DB_ROLES.split(',').each { role ->
+                        sh """
+                            docker exec postgres-db psql -U ${env.DB_USER} -c "DO \$\$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='${role}') THEN CREATE ROLE ${role}; END IF; END \$\$;"
+                        """
+                        echo "Role ${role} created or already exists."
+                    }
+                }
+            }
+        }
+
         stage('Get password') {
             steps {
                 echo "Generated password: ${env.RANDOM_PASSWORD}"
+            }
+        }
+    }
+
+    post {
+        always {
+            script {
+                sh 'docker stop postgres-db || true'
+                sh 'docker rm postgres-db || true'
             }
         }
     }
